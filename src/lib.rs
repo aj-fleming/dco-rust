@@ -68,6 +68,14 @@ impl<T: Float> Add for Tangent<T> {
     }
 }
 
+impl<T: Float> Add<T> for Tangent<T>{
+    type Output = Self;
+
+    fn add(self, rhs: T) -> Self {
+        return Self { value: self.value + rhs, derivative: self.derivative }
+    }
+}
+
 // impl<T: Float> AddAssign for Tangent<T> {
 //     fn add_assign(&mut self, rhs: Self) {
 //         self.value += rhs.value;
