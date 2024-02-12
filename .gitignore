@@ -1,0 +1,5 @@
+# ignore build information
+/target
+
+# ignore lockfile
+Cargo.lock
