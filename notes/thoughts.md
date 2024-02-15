@@ -1,10 +1,11 @@
 # Overall Impression
 
-Investing more time into Rust as a language for scientific computing and AD doesn't offer significant enough improvements over C(++) or other languages that are a bit friendlier to the user.
+Investing more time into Rust as a language for scientific computing and AD doesn't offer significant enough improvements over C(++) or other languages that are a bit friendlier to the user. As a Rust beginner, I felt that the language worked against and for me in equal measure.
 
-The maturity of `dco/c++` eliminates any advantage Rust may have over C++. Developing any serious application in Rust that requires AD would require untold effort to match the flexibility and power of `dco/c++`. 
+The maturity of `dco/c++` eliminates any advantage Rust may have over C++ in this case. Developing any serious application in Rust that requires AD would require untold effort to match the flexibility and power of `dco/c++`.
 
-In terms of prototyping speed, Rust is as a slow as C++ to write. `Cargo`, however, makes it easy to test and deploy packages. A working proof-of-concept or similar project can be easily shared with others without losing a few hours to install libraries. I have, however, never used `conan` or `vcpkg`.
+In terms of prototyping speed, Rust is as a slow as C++ to write (for a beginner). `Cargo`, however, makes it easy to test and deploy packages. A working proof-of-concept or similar project can be easily shared with others without losing a few hours to install libraries. I have, however, never used `conan` or `vcpkg`.
+
 
 ## The Good
 
