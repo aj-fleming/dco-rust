@@ -24,13 +24,18 @@ mod forward_mode {
         }
 
         fn dpoly2<T: Real>(x: T) -> T {
-            T::from(2).unwrap() * x + T::from(1).unwrap()
+            T::from(2).unwrap() * x + T::one()
+        }
+
+        fn poly4(x: Tangent<f64>) -> Tangent<f64>{
+            x.powf(4.0)
         }
 
         let arg = 2.0;
         let active_arg = ForwardDiffDual::make_active(arg);
         assert_eq!(poly2(arg), poly2(active_arg).v);
         assert_eq!(dpoly2(arg), poly2(active_arg).dv);
+        assert_eq!(poly4(active_arg).v, active_arg.v.powf(4.0));
     }
 
     #[test]

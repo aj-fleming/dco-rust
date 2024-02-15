@@ -2,13 +2,14 @@ use num::traits::{real::Real, MulAdd};
 use num::{Float, Num, NumCast, One, ToPrimitive, Zero};
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
+
 // use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
 
 #[derive(Clone, Copy)]
 #[repr(C)] // (necessary for re-interpreting the struct as something else.)
 /// Definition of forward-mode types for automatic differentiation.
-/// 
-/// 
+///
+///
 /// The "innermost" `T` should implement `num::Real` or `num::Float`.
 pub struct ForwardDiffDual<T, U> {
     v: T,
@@ -16,30 +17,26 @@ pub struct ForwardDiffDual<T, U> {
 }
 pub type Tangent<T> = ForwardDiffDual<T, T>;
 
-pub struct ReverseDiffDual<'tape, T, U, TAPE>{
+pub struct ReverseDiffDual<'tape, T, U, TAPE> {
     v: T,
     vbar: U,
     tape: &'tape mut TAPE,
 }
 
-pub struct Tape<T>{
+pub struct Tape<T> {
     tape: Vec<T>,
     n_in: i32,
     n_out: i32,
     position: i32,
 }
 
-impl <T> Tape<T>{
-    fn interpret(){
+impl<T> Tape<T> {
+    fn interpret() {}
 
-    }
-
-    fn push_derivative(&mut self, dv: T){
+    fn push_derivative(&mut self, dv: T) {
         self.tape.push(dv);
     }
 }
-
-
 
 pub type Adjoint<'tape, T> = ReverseDiffDual<'tape, T, T, Tape<T>>;
 
@@ -55,7 +52,7 @@ trait PassiveValue {
 }
 
 //
-// PassiveValue might be better specialized on f32, f64... maybe also on smaller floats? 
+// PassiveValue might be better specialized on f32, f64... maybe also on smaller floats?
 //
 
 impl<T: Float> PassiveValue for T {
@@ -87,7 +84,7 @@ impl<T: PartialEq, U: PartialEq> DualNumberEq for ForwardDiffDual<T, U> {
     }
 }
 
-impl<'a, T: PartialEq, U:PartialEq, TAPE> DualNumberEq for ReverseDiffDual<'a, T, U, TAPE>{
+impl<'a, T: PartialEq, U: PartialEq, TAPE> DualNumberEq for ReverseDiffDual<'a, T, U, TAPE> {
     #[inline]
     fn dual_eq(&self, other: &Self) -> bool {
         self.v == other.v && self.vbar == other.vbar
@@ -510,7 +507,7 @@ where
         }
     }
 
-    /// Here we use log rules to write log_a(arg) = ln(arg) / ln(a)
+    // Here we use log rules to write log_a(arg) = ln(arg) / ln(a)
     fn log(self, base: Self) -> Self {
         self.ln() / base.ln()
     }
@@ -683,6 +680,19 @@ where
 
     fn atanh(self) -> Self {
         todo!()
+    }
+}
+
+impl<T, U> ForwardDiffDual<T, U>
+where
+    T: Real,
+    U: Mul<T, Output = U>
+{
+    fn powf(self, n: T) -> Self {
+        Self {
+            v: self.v.powf(n.into()),
+            dv: self.dv * n * self.v.powf(n - T::one()), 
+        }
     }
 }
 
