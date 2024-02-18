@@ -2,15 +2,22 @@ use num::traits::{real::Real, MulAdd};
 use num::{Float, Num, NumCast, One, ToPrimitive, Zero};
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
-
 // use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
+
+/// Marks a scalar number as differentiable.
+/// Provides a `value()` method for extracting the value of the number.
+trait DifferentiableScalar {}
+
+impl DifferentiableScalar for f32 {}
+
+impl DifferentiableScalar for f64 {}
 
 #[derive(Clone, Copy)]
 #[repr(C)] // (necessary for re-interpreting the struct as something else.)
 /// Definition of forward-mode types for automatic differentiation.
 ///
 ///
-/// The "innermost" `T` should implement `num::Real` or `num::Float`.
+/// The "innermost" `T` should implement `DifferentiableScalar`.
 pub struct ForwardDiffDual<T, U> {
     v: T,
     dv: U,
@@ -55,7 +62,7 @@ trait PassiveValue {
 // PassiveValue might be better specialized on f32, f64... maybe also on smaller floats?
 //
 
-impl<T: Float> PassiveValue for T {
+impl<T: DifferentiableScalar> PassiveValue for T {
     type PassiveValueType = Self;
 
     #[inline]
@@ -70,6 +77,48 @@ impl<T: PassiveValue, U> PassiveValue for ForwardDiffDual<T, U> {
     #[inline]
     fn passive_value(self) -> Self::PassiveValueType {
         self.v.passive_value()
+    }
+}
+
+impl<'a, T: PassiveValue, U, TAPE> PassiveValue for ReverseDiffDual<'a, T, U, TAPE> {
+    type PassiveValueType = T::PassiveValueType;
+
+    fn passive_value(self) -> Self::PassiveValueType {
+        self.v.passive_value()
+    }
+}
+trait HighestOrderDerivative {
+    type HighestOrderDerivativeType;
+
+    fn highest_order_derivative(self) -> Self::HighestOrderDerivativeType;
+}
+
+impl<T: DifferentiableScalar> HighestOrderDerivative for T {
+    type HighestOrderDerivativeType = Self;
+
+    #[inline]
+    fn highest_order_derivative(self) -> Self::HighestOrderDerivativeType {
+        self
+    }
+}
+
+impl<T, U: HighestOrderDerivative> HighestOrderDerivative for ForwardDiffDual<T, U> {
+    type HighestOrderDerivativeType = U::HighestOrderDerivativeType;
+
+    #[inline]
+    fn highest_order_derivative(self) -> Self::HighestOrderDerivativeType {
+        self.dv.highest_order_derivative()
+    }
+}
+
+impl<'a, T, U: HighestOrderDerivative, TAPE> HighestOrderDerivative
+    for ReverseDiffDual<'a, T, U, TAPE>
+{
+    type HighestOrderDerivativeType = U::HighestOrderDerivativeType;
+
+    #[inline]
+    fn highest_order_derivative(self) -> Self::HighestOrderDerivativeType {
+        self.vbar.highest_order_derivative()
     }
 }
 
@@ -686,12 +735,12 @@ where
 impl<T, U> ForwardDiffDual<T, U>
 where
     T: Real,
-    U: Mul<T, Output = U>
+    U: Mul<T, Output = U>,
 {
     fn powf(self, n: T) -> Self {
         Self {
             v: self.v.powf(n.into()),
-            dv: self.dv * n * self.v.powf(n - T::one()), 
+            dv: self.dv * n * self.v.powf(n - T::one()),
         }
     }
 }
