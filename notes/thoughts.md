@@ -28,6 +28,8 @@ In terms of prototyping speed, Rust is as a slow as C++ to write (for a beginner
   ```rust
   pub struct Tangent<T>{...}
   ```
+  
+  - However, relaxing some of the desire for flexibility in the prototype `dco-rust` allows us to just write `Tangent<T>`.
 
 - The claim of that rust has an "algebriac type system" is too bold. Negative implementations and specialization are required to actually make it useful. There are "experimental features" available that may be worth investigating.
 

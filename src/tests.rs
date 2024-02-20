@@ -8,8 +8,8 @@ mod forward_mode {
     #[test]
     fn insantiation() {
         let a: f64 = 1.0;
-        let v1 = ForwardDiffDual::make_active(a);
-        let v2 = ForwardDiffDual::make_constant(a);
+        let v1 = Tangent::make_active(a);
+        let v2 = Tangent::make_constant(a);
 
         assert_eq!(a, v1.v);
         assert_eq!(f64::one(), v1.dv);
@@ -32,7 +32,7 @@ mod forward_mode {
         }
 
         let arg = 2.0;
-        let active_arg = ForwardDiffDual::make_active(arg);
+        let active_arg = Tangent::make_active(arg);
         assert_eq!(poly2(arg), poly2(active_arg).v);
         assert_eq!(dpoly2(arg), poly2(active_arg).dv);
         assert_eq!(poly4(active_arg).v, active_arg.v.powf(4.0));

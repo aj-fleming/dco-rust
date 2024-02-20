@@ -1,15 +1,13 @@
-use num::traits::{real::Real, MulAdd};
-use num::{Float, Num, NumCast, One, ToPrimitive, Zero};
+use num::traits::real::Real;
+use num::{Num, NumCast, One, ToPrimitive, Zero};
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 // use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
 
 /// Marks a scalar number as differentiable.
-/// Provides a `value()` method for extracting the value of the number.
-trait DifferentiableScalar {}
+pub trait DifferentiableScalar {}
 
 impl DifferentiableScalar for f32 {}
-
 impl DifferentiableScalar for f64 {}
 
 #[derive(Clone, Copy)]
@@ -18,34 +16,131 @@ impl DifferentiableScalar for f64 {}
 ///
 ///
 /// The "innermost" `T` should implement `DifferentiableScalar`.
-pub struct ForwardDiffDual<T, U> {
+pub struct Tangent<T> {
     v: T,
-    dv: U,
+    dv: T,
 }
-pub type Tangent<T> = ForwardDiffDual<T, T>;
 
-pub struct ReverseDiffDual<'tape, T, U, TAPE> {
+pub struct Adjoint<'tape, T, TAPE> {
     v: T,
-    vbar: U,
+    id: usize,
     tape: &'tape mut TAPE,
 }
 
-pub struct Tape<T> {
-    tape: Vec<T>,
-    n_in: i32,
-    n_out: i32,
-    position: i32,
-}
+pub trait AdjointTape<T>
+where
+    T: Copy + Num,
+{
+    fn num_inputs(&self) -> usize;
+    fn num_outputs(&self) -> usize;
 
-impl<T> Tape<T> {
-    fn interpret() {}
+    fn adjoint_vector_size(self) -> usize;
+    fn empty_seed(self) -> Vec<T>;
 
-    fn push_derivative(&mut self, dv: T) {
-        self.tape.push(dv);
+    fn num_dependencies(&self) -> usize;
+    fn num_derivatives(&self) -> usize;
+    fn num_adjoints(&self) -> usize;
+
+    fn record_derivative(&mut self, vbar: T);
+    fn record_result(&mut self, v: T);
+    fn scrub(&mut self);
+
+    fn adjoint_vector_idx(&self, tape_position: usize) -> usize;
+    fn taped_pullback_value_at(&self, tape_position: usize) -> T;
+    fn taped_dependency_at(&self, tape_position: usize) -> usize;
+
+    fn interpret(&self, seed: &mut Vec<T>) {
+        let mut dependency_tape_pos: usize = self.num_dependencies() - 1;
+        let mut pullback_tape_pos: usize = self.num_derivatives() - 1;
+        // the first entries on the tape are the labels for the independent vars
+        // so we don't need to keep reading backwards to their dependencies
+        // since there aren't any
+        while dependency_tape_pos > self.num_inputs() - 1 {
+            // portions of the dependency tape look like this:
+            // ... ID1 ID2 ID3 NARGS ADJID ...
+            // so we read backwards, decrementing by 1 after acquiring piece of information
+            let result_adj_idx: usize = self.adjoint_vector_idx(dependency_tape_pos);
+            dependency_tape_pos -= 1;
+            let num_pullbacks: usize = self.taped_dependency_at(dependency_tape_pos);
+            dependency_tape_pos -= 1;
+            let result_pullback: T = seed[result_adj_idx];
+            seed[result_adj_idx] = T::zero();
+            for _ in 0..num_pullbacks {
+                let pullback_idx: usize = self.adjoint_vector_idx(dependency_tape_pos);
+                dependency_tape_pos -= 1;
+                let arg_pullback: T = self.taped_pullback_value_at(pullback_tape_pos);
+                pullback_tape_pos -= 1;
+                seed[pullback_idx] = seed[pullback_idx] + result_pullback * arg_pullback;
+            }
+        }
     }
 }
 
-pub type Adjoint<'tape, T> = ReverseDiffDual<'tape, T, T, Tape<T>>;
+pub struct MinimalTape<T> {
+    dependencies: Vec<usize>,
+    pullbacks: Vec<T>,
+
+    n_in: usize,
+    n_out: usize,
+    n_adjoints: usize,
+}
+
+impl<T> AdjointTape<T> for MinimalTape<T>
+where
+    T: Copy + Num,
+{
+    fn num_inputs(&self) -> usize {
+        self.n_in
+    }
+
+    fn num_outputs(&self) -> usize {
+        self.n_out
+    }
+
+    fn adjoint_vector_size(self) -> usize {
+        self.num_adjoints()
+    }
+
+    fn empty_seed(self) -> Vec<T> {
+        vec![T::zero(); self.adjoint_vector_size()]
+    }
+
+    fn num_dependencies(&self) -> usize {
+        self.dependencies.len()
+    }
+
+    fn num_derivatives(&self) -> usize {
+        self.pullbacks.len()
+    }
+
+    fn num_adjoints(&self) -> usize {
+        self.n_adjoints
+    }
+
+    fn record_derivative(&mut self, vbar: T) {
+        todo!()
+    }
+
+    fn record_result(&mut self, v: T) {
+        todo!()
+    }
+
+    fn scrub(&mut self) {
+        todo!()
+    }
+
+    fn adjoint_vector_idx(&self, tape_position: usize) -> usize {
+        todo!()
+    }
+
+    fn taped_pullback_value_at(&self, tape_position: usize) -> T {
+        todo!()
+    }
+
+    fn taped_dependency_at(&self, tape_position: usize) -> usize {
+        todo!()
+    }
+}
 
 //
 // VALUE AND DERIVATIVE METHODS
@@ -71,7 +166,7 @@ impl<T: DifferentiableScalar> PassiveValue for T {
     }
 }
 
-impl<T: PassiveValue, U> PassiveValue for ForwardDiffDual<T, U> {
+impl<T: PassiveValue> PassiveValue for Tangent<T> {
     type PassiveValueType = T::PassiveValueType;
 
     #[inline]
@@ -80,7 +175,7 @@ impl<T: PassiveValue, U> PassiveValue for ForwardDiffDual<T, U> {
     }
 }
 
-impl<'a, T: PassiveValue, U, TAPE> PassiveValue for ReverseDiffDual<'a, T, U, TAPE> {
+impl<'a, T: PassiveValue, TAPE> PassiveValue for Adjoint<'a, T, TAPE> {
     type PassiveValueType = T::PassiveValueType;
 
     fn passive_value(self) -> Self::PassiveValueType {
@@ -102,8 +197,8 @@ impl<T: DifferentiableScalar> HighestOrderDerivative for T {
     }
 }
 
-impl<T, U: HighestOrderDerivative> HighestOrderDerivative for ForwardDiffDual<T, U> {
-    type HighestOrderDerivativeType = U::HighestOrderDerivativeType;
+impl<T: HighestOrderDerivative> HighestOrderDerivative for Tangent<T> {
+    type HighestOrderDerivativeType = T::HighestOrderDerivativeType;
 
     #[inline]
     fn highest_order_derivative(self) -> Self::HighestOrderDerivativeType {
@@ -111,53 +206,35 @@ impl<T, U: HighestOrderDerivative> HighestOrderDerivative for ForwardDiffDual<T,
     }
 }
 
-impl<'a, T, U: HighestOrderDerivative, TAPE> HighestOrderDerivative
-    for ReverseDiffDual<'a, T, U, TAPE>
-{
-    type HighestOrderDerivativeType = U::HighestOrderDerivativeType;
-
-    #[inline]
-    fn highest_order_derivative(self) -> Self::HighestOrderDerivativeType {
-        self.vbar.highest_order_derivative()
-    }
-}
-
 trait DualNumberEq {
     fn dual_eq(&self, other: &Self) -> bool;
 }
 
-impl<T: PartialEq, U: PartialEq> DualNumberEq for ForwardDiffDual<T, U> {
+impl<T: PartialEq> DualNumberEq for Tangent<T> {
     #[inline]
     fn dual_eq(&self, other: &Self) -> bool {
         self.v == other.v && self.dv == other.dv
     }
 }
 
-impl<'a, T: PartialEq, U: PartialEq, TAPE> DualNumberEq for ReverseDiffDual<'a, T, U, TAPE> {
-    #[inline]
-    fn dual_eq(&self, other: &Self) -> bool {
-        self.v == other.v && self.vbar == other.vbar
-    }
-}
-
-impl<T, U: Zero> ForwardDiffDual<T, U> {
+impl<T: Zero> Tangent<T> {
     /// Take some passive value `arg` and turn it into a Tangent with zero derivative (constant)
     #[inline]
-    pub fn make_constant(arg: impl Into<T>) -> ForwardDiffDual<T, U> {
+    pub fn make_constant(arg: impl Into<T>) -> Tangent<T> {
         Self {
             v: arg.into(),
-            dv: U::zero(),
+            dv: T::zero(),
         }
     }
 }
 
-impl<T, U: One> ForwardDiffDual<T, U> {
+impl<T: One> Tangent<T> {
     /// Take some passive value `arg` and turn it into a Tangent with unity derivative (active)
     #[inline]
-    pub fn make_active(arg: impl Into<T>) -> ForwardDiffDual<T, U> {
+    pub fn make_active(arg: impl Into<T>) -> Tangent<T> {
         Self {
             v: arg.into(),
-            dv: U::one(),
+            dv: T::one(),
         }
     }
 }
@@ -166,7 +243,7 @@ impl<T, U: One> ForwardDiffDual<T, U> {
 // EQUALITY AND ORDERING
 //
 
-impl<T: PartialEq, U> PartialEq<ForwardDiffDual<T, U>> for ForwardDiffDual<T, U> {
+impl<T: PartialEq> PartialEq<Tangent<T>> for Tangent<T> {
     #[inline]
     /// We discard the derivative information when checking equality.
     fn eq(&self, other: &Self) -> bool {
@@ -174,10 +251,10 @@ impl<T: PartialEq, U> PartialEq<ForwardDiffDual<T, U>> for ForwardDiffDual<T, U>
     }
 }
 
-impl<T: PartialOrd, U> PartialOrd<ForwardDiffDual<T, U>> for ForwardDiffDual<T, U> {
+impl<T: PartialOrd> PartialOrd<Tangent<T>> for Tangent<T> {
     #[inline]
     // We discard the derivative information when comparing.
-    fn partial_cmp(&self, other: &ForwardDiffDual<T, U>) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Tangent<T>) -> Option<std::cmp::Ordering> {
         PartialOrd::partial_cmp(&self.v, &other.v)
     }
 }
@@ -186,12 +263,12 @@ impl<T: PartialOrd, U> PartialOrd<ForwardDiffDual<T, U>> for ForwardDiffDual<T, 
 // ZERO AND ONE
 //
 
-impl<T: Zero, U: Zero> Zero for ForwardDiffDual<T, U> {
+impl<T: Zero> Zero for Tangent<T> {
     #[inline]
     fn zero() -> Self {
         Self {
             v: T::zero(),
-            dv: U::zero(),
+            dv: T::zero(),
         }
     }
 
@@ -201,15 +278,16 @@ impl<T: Zero, U: Zero> Zero for ForwardDiffDual<T, U> {
     }
 }
 
-impl<T: Copy + One + PartialEq, U: Zero + Mul<T, Output = U>> One for ForwardDiffDual<T, U> {
+impl<T: Copy + One + Zero + PartialEq> One for Tangent<T> {
     #[inline]
     fn one() -> Self {
         Self {
             v: T::one(),
-            dv: U::zero(),
+            dv: T::zero(),
         }
     }
 
+    #[inline]
     fn is_one(&self) -> bool
     where
         Self: PartialEq,
@@ -222,10 +300,9 @@ impl<T: Copy + One + PartialEq, U: Zero + Mul<T, Output = U>> One for ForwardDif
 // NUMOPS AND NUM
 //
 
-impl<T, U> Add for ForwardDiffDual<T, U>
+impl<T> Add for Tangent<T>
 where
     T: Add<T, Output = T>,
-    U: Add<U, Output = U>,
 {
     type Output = Self;
 
@@ -238,10 +315,9 @@ where
     }
 }
 
-impl<T, U> Sub for ForwardDiffDual<T, U>
+impl<T> Sub for Tangent<T>
 where
     T: Sub<T, Output = T>,
-    U: Sub<U, Output = U>,
 {
     type Output = Self;
 
@@ -254,10 +330,9 @@ where
     }
 }
 
-impl<T: Copy, U> Mul for ForwardDiffDual<T, U>
+impl<T> Mul for Tangent<T>
 where
-    T: Mul<T, Output = T>,
-    U: Mul<T, Output = U> + Add<U, Output = U>,
+    T: Copy + Mul<T, Output = T> + Add<T, Output = T>,
 {
     type Output = Self;
 
@@ -270,10 +345,9 @@ where
     }
 }
 
-impl<T, U> Neg for ForwardDiffDual<T, U>
+impl<T> Neg for Tangent<T>
 where
     T: Neg<Output = T>,
-    U: Neg<Output = U>,
 {
     type Output = Self;
 
@@ -286,10 +360,9 @@ where
     }
 }
 
-impl<T: Copy, U> Div for ForwardDiffDual<T, U>
+impl<T> Div for Tangent<T>
 where
-    T: Div<T, Output = T> + Mul<T, Output = T>,
-    U: Mul<T, Output = U> + Sub<U, Output = U> + Div<U, Output = U> + Div<T, Output = U>,
+    T: Copy + Div<T, Output = T> + Mul<T, Output = T> + Sub<T, Output = T>,
 {
     type Output = Self;
 
@@ -302,7 +375,7 @@ where
     }
 }
 
-impl<T, U> Rem for ForwardDiffDual<T, U> {
+impl<T> Rem for Tangent<T> {
     type Output = Self;
 
     fn rem(self, rhs: Self) -> Self::Output {
@@ -310,20 +383,14 @@ impl<T, U> Rem for ForwardDiffDual<T, U> {
     }
 }
 
-impl<T, U> Num for ForwardDiffDual<T, U>
+impl<T> Num for Tangent<T>
 where
     T: Copy + Num,
-    U: Zero
-        + Add<U, Output = U>
-        + Sub<U, Output = U>
-        + Mul<T, Output = U>
-        + Div<U, Output = U>
-        + Div<T, Output = U>,
 {
     type FromStrRadixErr = T::FromStrRadixErr;
 
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        T::from_str_radix(src, radix).map(ForwardDiffDual::make_constant)
+        T::from_str_radix(src, radix).map(Tangent::make_constant)
     }
 }
 
@@ -331,13 +398,13 @@ where
 // NUMCAST AND REAL
 //
 
-impl<T: NumCast, U: Zero> NumCast for ForwardDiffDual<T, U> {
-    fn from<V: num::ToPrimitive>(n: V) -> Option<Self> {
+impl<T: NumCast + Zero> NumCast for Tangent<T> {
+    fn from<V: ToPrimitive>(n: V) -> Option<Self> {
         T::from(n).map(Self::make_constant)
     }
 }
 
-impl<T: ToPrimitive, U> ToPrimitive for ForwardDiffDual<T, U> {
+impl<T: ToPrimitive> ToPrimitive for Tangent<T> {
     fn to_isize(&self) -> Option<isize> {
         self.v.to_isize()
     }
@@ -387,10 +454,9 @@ impl<T: ToPrimitive, U> ToPrimitive for ForwardDiffDual<T, U> {
     }
 }
 
-impl<T, U> Real for ForwardDiffDual<T, U>
+impl<T> Real for Tangent<T>
 where
     T: Real,
-    U: Copy + Clone + Mul<T, Output = U> + Div<T, Output = U> + Real + MulAdd<T, U, Output = U>,
 {
     /// Get the minimum value of a Tangent.
     /// Does {min, min} make sense here?
@@ -398,7 +464,7 @@ where
     fn min_value() -> Self {
         Self {
             v: T::min_value(),
-            dv: U::min_value(),
+            dv: T::min_value(),
         }
     }
 
@@ -406,7 +472,7 @@ where
     fn min_positive_value() -> Self {
         Self {
             v: T::min_positive_value(),
-            dv: U::min_positive_value(),
+            dv: T::min_positive_value(),
         }
     }
 
@@ -414,7 +480,7 @@ where
     fn epsilon() -> Self {
         Self {
             v: T::epsilon(),
-            dv: U::epsilon(),
+            dv: T::epsilon(),
         }
     }
 
@@ -422,7 +488,7 @@ where
     fn max_value() -> Self {
         Self {
             v: T::max_value(),
-            dv: U::max_value(),
+            dv: T::max_value(),
         }
     }
 
@@ -478,7 +544,7 @@ where
     }
 
     fn signum(self) -> Self {
-        ForwardDiffDual::make_constant(self.v.signum())
+        Tangent::make_constant(self.v.signum())
     }
 
     fn is_sign_positive(self) -> bool {
@@ -494,7 +560,7 @@ where
             // f = a*x + b
             v: self.v.mul_add(a.v, b.v),
             // f' = a' * x + (a * x' + b')
-            dv: MulAdd::mul_add(a.dv, self.v, MulAdd::mul_add(self.dv, a.v, b.dv)),
+            dv: self.dv.mul_add(self.v, self.dv.mul_add(a.v, b.dv)),
         }
     }
 
@@ -525,8 +591,8 @@ where
                 // we need to avoid division by "close to zero" if possible
                 // dsqrt = 1/(2sqrt(x))dx
                 let denom = sqrtvalue * T::from(2).unwrap();
-                if denom == T::zero() && self.dv == U::zero() {
-                    U::zero()
+                if denom == T::zero() && self.dv == T::zero() {
+                    T::zero()
                 } else {
                     self.dv / denom
                 }
@@ -622,10 +688,10 @@ where
             v: cbrtvalue,
             dv: {
                 let denom = cbrtvalue.powi(2) * T::from(3).unwrap();
-                if denom == T::zero() && self.dv == U::zero() {
-                    U::zero()
+                if denom == T::zero() && self.dv == T::zero() {
+                    T::zero()
                 } else {
-                    U::from(2).unwrap() * self.dv / denom
+                    T::from(2).unwrap() * self.dv / denom
                 }
             },
         }
@@ -635,7 +701,7 @@ where
         let hypotvalue = self.v.hypot(other.v);
         Self {
             v: hypotvalue,
-            dv: (U::from(2).unwrap())
+            dv: (T::from(2).unwrap())
                 * (self.dv * self.v + other.dv * other.v)
                 * hypotvalue.recip(),
         }
@@ -732,10 +798,9 @@ where
     }
 }
 
-impl<T, U> ForwardDiffDual<T, U>
+impl<T> Tangent<T>
 where
     T: Real,
-    U: Mul<T, Output = U>,
 {
     fn powf(self, n: T) -> Self {
         Self {
