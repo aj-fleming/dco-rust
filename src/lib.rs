@@ -1,7 +1,9 @@
-use num::{Num, Zero};
+use num::{Num, One, Zero};
 use std::cell::RefCell;
-use std::ops::Add;
-use std::ops::Mul;
+use std::ops::{Add, Mul};
+
+#[cfg(test)]
+mod tests;
 
 // use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
 
@@ -14,7 +16,6 @@ impl DifferentiableScalar for f64 {}
 #[derive(Clone, Copy)]
 #[repr(C)] // (necessary for re-interpreting the struct as something else.)
 /// Definition of forward-mode types for automatic differentiation.
-///
 ///
 /// The "innermost" `T` should implement `DifferentiableScalar`.
 pub struct Tangent<T> {
@@ -287,12 +288,31 @@ impl<T: HighestOrderDerivative> HighestOrderDerivative for Tangent<T> {
 mod fwd_ops;
 pub use self::fwd_ops::*;
 
+impl<T: Zero> Tangent<T> {
+    /// Take some passive value `arg` and turn it into a Tangent with zero derivative (constant)
+    #[inline]
+    pub fn make_constant(arg: impl Into<T>) -> Tangent<T> {
+        Self {
+            v: arg.into(),
+            dv: T::zero(),
+        }
+    }
+}
+
+impl<T: One> Tangent<T> {
+    /// Take some passive value `arg` and turn it into a Tangent with unity derivative (active)
+    #[inline]
+    pub fn make_active(arg: impl Into<T>) -> Tangent<T> {
+        Self {
+            v: arg.into(),
+            dv: T::one(),
+        }
+    }
+}
+
 //
 // OPERATIONS ON ADJOINTS
 //
 
 mod rev_ops;
 pub use self::rev_ops::*;
-
-#[cfg(test)]
-mod tests;

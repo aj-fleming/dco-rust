@@ -8,28 +8,6 @@ use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use crate::Tangent;
 
-impl<T: Zero> Tangent<T> {
-    /// Take some passive value `arg` and turn it into a Tangent with zero derivative (constant)
-    #[inline]
-    pub fn make_constant(arg: impl Into<T>) -> Tangent<T> {
-        Self {
-            v: arg.into(),
-            dv: T::zero(),
-        }
-    }
-}
-
-impl<T: One> Tangent<T> {
-    /// Take some passive value `arg` and turn it into a Tangent with unity derivative (active)
-    #[inline]
-    pub fn make_active(arg: impl Into<T>) -> Tangent<T> {
-        Self {
-            v: arg.into(),
-            dv: T::one(),
-        }
-    }
-}
-
 //
 // EQUALITY AND ORDERING
 //
@@ -382,7 +360,14 @@ where
     // }
 
     fn powf(self, n: Self) -> Self {
-        todo!()
+        Self {
+            v: self.v.powf(n.v),
+            dv: if n.dv.is_zero() {
+                n.v * self.v.powf(n.v - T::one()) * self.dv
+            } else {
+                n.v * self.v.powf(n.v - T::one()) * self.dv + self.v.powf(n.v) * self.v.ln() * n.dv
+            },
+        }
     }
 
     fn sqrt(self) -> Self {
