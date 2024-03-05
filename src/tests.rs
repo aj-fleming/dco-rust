@@ -1,12 +1,13 @@
 use super::*;
-use approx;
 
 mod forward_mode {
-    use approx::assert_abs_diff_eq;
-
     use super::*;
+    use approx::assert_abs_diff_eq;
+    use num::traits::One;
+    use num::traits::real::Real;
+
     #[test]
-    fn insantiation() {
+    fn tangent_initialization() {
         let a: f64 = 1.0;
         let v1 = Tangent::make_active(a);
         let v2 = Tangent::make_constant(a);
@@ -27,8 +28,9 @@ mod forward_mode {
             T::from(2).unwrap() * x + T::one()
         }
 
-        fn poly4(x: Tangent<f64>) -> Tangent<f64>{
-            x.powf(4.0)
+        fn poly4(x: Tangent<f64>) -> Tangent<f64> {
+            let n: Tangent<f64> = Tangent::make_constant(4.0);
+            x.powf(n)
         }
 
         let arg = 2.0;
@@ -55,11 +57,30 @@ mod forward_mode {
     }
 
     #[test]
-    fn linalg(){
+    fn linalg() {
         use nalgebra as na;
         let v = na::Vector2::new(1.0, 2.0);
         let arg: Tangent<na::Vector2<f64>> = Tangent::make_constant(v);
         let res = arg + arg;
         assert_eq!(res.v[0], 2.0 * v[0]);
+    }
+}
+
+mod reverse_mode {
+    use super::*;
+    use approx::abs_diff_eq;
+
+    #[test]
+    fn adjoint_initialization() {
+        let mut tape: MinimalTape<f64> = MinimalTape::new();
+        assert_eq!(tape.num_adjoints(), 0 );
+        let a1 = tape.new_independent_variable(1.0);
+        assert_eq!(a1.v, 1.0);
+        assert_eq!(tape.num_adjoints(), 1 );
+    }
+
+    #[test]
+    fn scalar_tape(){
+
     }
 }

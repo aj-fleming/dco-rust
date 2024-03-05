@@ -2,18 +2,9 @@
 // CONSTANTS AND IDENTITIES
 //
 
-use std::ops::Add;
-use std::ops::Mul;
-use std::ops::Neg;
-use std::ops::Sub;
 use num::traits::real::Real;
-use num::Num;
-use num::ToPrimitive;
-use num::NumCast;
-use num::One;
-use std::ops::{Div, Rem};
-
-use num::Zero;
+use num::{Num, NumCast, One, ToPrimitive, Zero};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use crate::Tangent;
 

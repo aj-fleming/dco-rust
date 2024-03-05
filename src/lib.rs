@@ -1,5 +1,7 @@
 use num::{Num, Zero};
 use std::cell::RefCell;
+use std::ops::Add;
+use std::ops::Mul;
 
 // use std::ops::{AddAssign, DivAssign, MulAssign, SubAssign};
 
@@ -20,26 +22,20 @@ pub struct Tangent<T> {
     dv: T,
 }
 
+#[derive(Clone, Copy)]
 pub struct Adjoint<'tape, T, TAPE>
 where
-    T: Copy + Num,
+    T: Copy + Zero + Add<Output = T> + Mul<Output = T>,
     TAPE: AdjointTape<T> + ?Sized,
 {
     v: T,
     id: usize,
-    tape: &'tape TAPE,
-}
-
-impl<'tape, T, TAPE> Adjoint<'tape, T, TAPE>
-where
-    T: Copy + Num,
-    TAPE: AdjointTape<T>,
-{
+    tape: Option<&'tape TAPE>,
 }
 
 pub trait AdjointTape<T>
 where
-    T: Copy + Num,
+    T: Copy + Zero + Add<Output = T> + Mul<Output = T>,
 {
     /// Get the number of independent variables on this tape.
     fn num_independents(&self) -> usize;
@@ -117,7 +113,7 @@ pub struct MinimalTape<T> {
 
 impl<T> MinimalTape<T>
 where
-    T: Copy + Num,
+    T: Copy + Zero,
 {
     fn new() -> MinimalTape<T> {
         MinimalTape {
@@ -125,14 +121,14 @@ where
             n_outputs: 0,
             n_adjoints: RefCell::new(0),
             adj_deps: RefCell::new(vec![usize::zero(); 0]),
-            pullbacks: RefCell::new(vec![T::zero(); 0]),
+            pullbacks: RefCell::new(Vec::new()),
         }
     }
 }
 
 impl<T> AdjointTape<T> for MinimalTape<T>
 where
-    T: Copy + Num,
+    T: Copy + Zero + Add<Output = T> + Mul<Output = T>,
 {
     #[inline]
     fn num_independents(&self) -> usize {
@@ -150,7 +146,7 @@ where
         Adjoint {
             v: val,
             id: new_id,
-            tape: self,
+            tape: Some(self),
         }
     }
 
@@ -190,7 +186,6 @@ where
         let mut adj_deps = self.adj_deps.borrow_mut();
         adj_deps.push(nargs);
         adj_deps.push(v.id);
-        
     }
 
     fn scrub(&mut self) {
@@ -285,9 +280,19 @@ impl<T: HighestOrderDerivative> HighestOrderDerivative for Tangent<T> {
     }
 }
 
+//
+// OPERATIONS ON TANGENTS
+//
+
 mod fwd_ops;
 pub use self::fwd_ops::*;
 
+//
+// OPERATIONS ON ADJOINTS
+//
+
+mod rev_ops;
+pub use self::rev_ops::*;
 
 #[cfg(test)]
 mod tests;
