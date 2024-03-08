@@ -1014,6 +1014,17 @@ where
 // NUMOPS AND NUM
 //
 
+/// Gets an optional reference to a tape. Prefers to return the first argument if it is `Some`.
+fn select_tape<'a, TAPE>(t1: Option<&'a TAPE>, t2: Option<&'a TAPE>) -> Option<&'a TAPE> {
+    if let Some(_) = t1 {
+        t1
+    } else if let Some(_) = t2 {
+        t2
+    } else {
+        None
+    }
+}
+
 impl<'a, T, TAPE> Add for Adjoint<'a, T, TAPE>
 where
     T: AdjointDifferentiable,
@@ -1021,23 +1032,22 @@ where
 {
     type Output = Self;
 
-    fn add(self, rhs_maybe_identity: Self) -> Self::Output {
-        // we first need to check if the adjoint is taped.
-        // (identity functions from One and Zero don't know about the tape)
-        let rhs: Adjoint<'_, T, TAPE> = match rhs_maybe_identity.tape {
-            Some(_) => rhs_maybe_identity,
-            None => create_constant(rhs_maybe_identity.v, self.tape.unwrap()),
-        };
-        let mut res: Adjoint<'_, T, TAPE> = Self {
-            v: self.v + rhs.v,
-            id: 0,
-            tape: self.tape,
-        };
-        let tape: &TAPE = self.tape.unwrap();
-        tape.record_derivative(&self, T::one());
-        tape.record_derivative(&rhs, T::one());
-        tape.record_result(&mut res, 2);
-        res
+    fn add(self, rhs: Self) -> Self::Output {
+        let tape: Option<&TAPE> = select_tape(self.tape, rhs.tape);
+        match tape {
+            Some(tape) => {
+                let mut res: Adjoint<'_, T, TAPE> = Adjoint {
+                    v: self.v + rhs.v,
+                    id: 0,
+                    tape: Some(tape),
+                };
+                tape.record_derivative(&self, T::one());
+                tape.record_derivative(&rhs, T::one());
+                tape.record_result(&mut res, 2);
+                res
+            }
+            None => Adjoint::new_empty(self.v + rhs.v),
+        }
     }
 }
 
@@ -1048,23 +1058,22 @@ where
 {
     type Output = Self;
 
-    fn sub(self, rhs_maybe_identity: Self) -> Self::Output {
-        // we first need to check if the adjoint is taped.
-        // (identity functions from One and Zero don't know about the tape)
-        let rhs: Adjoint<'_, T, TAPE> = match rhs_maybe_identity.tape {
-            Some(_) => rhs_maybe_identity,
-            None => create_constant(rhs_maybe_identity.v, self.tape.unwrap()),
-        };
-        let mut res: Adjoint<'_, T, TAPE> = Self {
-            v: self.v - rhs.v,
-            id: 0,
-            tape: self.tape,
-        };
-        let tape: &TAPE = self.tape.unwrap();
-        tape.record_derivative(&self, T::one());
-        tape.record_derivative(&rhs, -T::one());
-        tape.record_result(&mut res, 2);
-        res
+    fn sub(self, rhs: Self) -> Self::Output {
+        let tape: Option<&TAPE> = select_tape(self.tape, rhs.tape);
+        match tape {
+            Some(tape) => {
+                let mut res: Adjoint<'_, T, TAPE> = Adjoint {
+                    v: self.v - rhs.v,
+                    id: 0,
+                    tape: Some(tape),
+                };
+                tape.record_derivative(&self, T::one());
+                tape.record_derivative(&rhs, -T::one());
+                tape.record_result(&mut res, 2);
+                res
+            }
+            None => Adjoint::new_empty(self.v - rhs.v),
+        }
     }
 }
 
@@ -1075,21 +1084,22 @@ where
 {
     type Output = Self;
 
-    fn mul(self, rhs_maybe_identity: Self) -> Self::Output {
-        let rhs: Adjoint<'_, T, TAPE> = match rhs_maybe_identity.tape {
-            Some(_) => rhs_maybe_identity,
-            None => create_constant(rhs_maybe_identity.v, self.tape.unwrap()),
-        };
-        let mut res: Adjoint<'_, T, TAPE> = Self {
-            v: self.v + rhs.v,
-            id: 0,
-            tape: self.tape,
-        };
-        let tape: &TAPE = self.tape.unwrap();
-        tape.record_derivative(&self, rhs.v);
-        tape.record_derivative(&rhs, self.v);
-        tape.record_result(&mut res, 2);
-        res
+    fn mul(self, rhs: Self) -> Self::Output {
+        let tape: Option<&TAPE> = select_tape(self.tape, rhs.tape);
+        match tape {
+            Some(tape) => {
+                let mut res: Adjoint<'_, T, TAPE> = Adjoint {
+                    v: self.v * rhs.v,
+                    id: 0,
+                    tape: Some(tape),
+                };
+                tape.record_derivative(&self, rhs.v);
+                tape.record_derivative(&rhs, self.v);
+                tape.record_result(&mut res, 2);
+                res
+            }
+            None => Adjoint::new_empty(self.v * rhs.v),
+        }
     }
 }
 
@@ -1101,15 +1111,19 @@ where
     type Output = Self;
 
     fn neg(self) -> Self::Output {
-        let mut res: Adjoint<'_, T, TAPE> = Self {
-            v: -self.v,
-            id: 0,
-            tape: self.tape,
-        };
-        let tape: &TAPE = self.tape.unwrap();
-        tape.record_derivative(&self, -T::one());
-        tape.record_result(&mut res, 1);
-        res
+        match self.tape {
+            Some(tape) => {
+                let mut res: Adjoint<'_, T, TAPE> = Self {
+                    v: -self.v,
+                    id: 0,
+                    tape: Some(tape),
+                };
+                tape.record_derivative(&self, -T::one());
+                tape.record_result(&mut res, 1);
+                res
+            }
+            None => Adjoint::new_empty(-self.v),
+        }
     }
 }
 
@@ -1120,23 +1134,22 @@ where
 {
     type Output = Self;
 
-    fn div(self, rhs_maybe_identity: Self) -> Self::Output {
-        // we first need to check if the adjoint is taped.
-        // (identity functions from One and Zero don't know about the tape)
-        let rhs: Adjoint<'_, T, TAPE> = match rhs_maybe_identity.tape {
-            Some(_) => rhs_maybe_identity,
-            None => create_constant(rhs_maybe_identity.v, self.tape.unwrap()),
-        };
-        let mut res: Adjoint<'_, T, TAPE> = Self {
-            v: self.v / rhs.v,
-            id: 0,
-            tape: self.tape,
-        };
-        let tape: &TAPE = self.tape.unwrap();
-        tape.record_derivative(&self, T::one() / rhs.v);
-        tape.record_derivative(&rhs, -self.v / (rhs.v * rhs.v));
-        tape.record_result(&mut res, 2);
-        res
+    fn div(self, rhs: Self) -> Self::Output {
+        let tape: Option<&TAPE> = select_tape(self.tape, rhs.tape);
+        match tape {
+            Some(tape) => {
+                let mut res: Adjoint<'_, T, TAPE> = Self {
+                    v: self.v / rhs.v,
+                    id: 0,
+                    tape: Some(tape),
+                };
+                tape.record_derivative(&self, T::one() / rhs.v);
+                tape.record_derivative(&rhs, -self.v / (rhs.v * rhs.v));
+                tape.record_result(&mut res, 2);
+                res
+            }
+            None => Adjoint::new_empty(self.v / rhs.v),
+        }
     }
 }
 
@@ -1358,19 +1371,43 @@ where
     }
 
     fn signum(self) -> Self {
-        todo!()
+        match self.tape {
+            Some(tape) => {
+                let mut res = Adjoint {
+                    v: self.v.signum(),
+                    id: 0,
+                    tape: Some(tape),
+                };
+                tape.record_derivative(&self, T::zero());
+                tape.record_result(&mut res, 1);
+                res
+            }
+            None => Adjoint::new_empty(self.v.signum()),
+        }
     }
 
     fn is_sign_positive(self) -> bool {
-        todo!()
+        self.v.is_sign_positive()
     }
 
     fn is_sign_negative(self) -> bool {
-        todo!()
+        self.v.is_sign_negative()
     }
 
     fn mul_add(self, a: Self, b: Self) -> Self {
-        todo!()
+        let tape: Option<&TAPE> = select_tape(self.tape, select_tape(a.tape, b.tape));
+        match tape{
+            Some(tape) => {
+                let mut res = Adjoint{
+                    v: self.v.mul_add(a.v, b.v),
+                    id: 0,
+                    tape: Some(tape),
+                };
+                
+                res
+            },
+            None => Adjoint::new_empty(self.v.mul_add(a.v, b.v))
+        }
     }
 
     fn recip(self) -> Self {
